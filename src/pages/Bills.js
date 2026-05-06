@@ -355,6 +355,48 @@ export default function Bills({ user }) {
               </table>
             </div>
 
+            {/* Mobile cards — CSS shows these only on small screens */}
+            <div className="mobile-cards">
+              {bills.map(b => (
+                <div key={b.id} className="mobile-card">
+                  <div className="mobile-card-top">
+                    <div style={{flex:1,minWidth:0}}>
+                      <div className="mobile-card-desc" style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.description}</div>
+                      <span className="voucher-tag" style={{marginTop:4,display:'inline-block'}}>{b.voucher_no}</span>
+                    </div>
+                    <div className="mobile-card-amount">₹{fmt(b.amount)}</div>
+                  </div>
+                  <div className="mobile-card-meta">
+                    <div className="mobile-card-field"><span className="mobile-card-label">Date</span><span className="mobile-card-value">{b.date}</span></div>
+                    <div className="mobile-card-field"><span className="mobile-card-label">Category</span><span className="mobile-card-value">{b.category ? <span className="badge badge-cat">{b.category}</span> : '—'}</span></div>
+                    <div className="mobile-card-field"><span className="mobile-card-label">Site</span><span className="mobile-card-value">{b.purpose_site||'—'}</span></div>
+                    <div className="mobile-card-field"><span className="mobile-card-label">Paid By</span><span className="mobile-card-value">{b.paid_by||'—'}</span></div>
+                    <div className="mobile-card-field"><span className="mobile-card-label">Vendor</span><span className="mobile-card-value">{b.vendor||'—'}</span></div>
+                    <div className="mobile-card-field"><span className="mobile-card-label">Mode</span><span className="mobile-card-value">{b.payment_mode ? <span className="badge badge-mode">{b.payment_mode}</span> : '—'}</span></div>
+                  </div>
+                  <div className="mobile-card-actions">
+                    <button className="action-btn" onClick={() => navigate(`/bills/${b.id}/edit`)}>✏️ Edit</button>
+                    <button className="action-btn" onClick={() => printBill(b)}>🖨️ Print</button>
+                    {b.attachment_name && (
+                      <button className="action-btn" onClick={async () => {
+                        try {
+                          const r = await api.get(`/bills/${b.id}`);
+                          const bill = r.data.data;
+                          if (bill.attachment_data) setViewFile({ name: bill.attachment_name, data: bill.attachment_data, type: bill.attachment_type });
+                          else toast.error('No file data found.');
+                        } catch { toast.error('Failed.'); }
+                      }}>📎 File</button>
+                    )}
+                    {user.role === 'admin' && (
+                      <button className="action-btn del" disabled={deleting===b.id} onClick={() => handleDelete(b.id)}>
+                        {deleting===b.id ? '…' : '🗑️ Del'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             {totalPages > 1 && (
               <div className="pagination">
                 <button className="page-btn" disabled={page===1} onClick={() => setPage(p=>p-1)}>← Prev</button>

@@ -30,18 +30,21 @@ const toBase64 = (file) => new Promise((res, rej) => {
 });
 
 // Smart dropdown with "+ Add New" option
-function SmartSelect({ label, fieldName, value, onChange, options, required, placeholder }) {
+function SmartSelect({ label, fieldName, value, onChange, options, required, placeholder, onOptionAdded }) {
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleAdd = async () => {
-    if (!newVal.trim()) return;
+    const trimmed = newVal.trim();
+    if (!trimmed) return;
     setSaving(true);
     try {
-      await api.post('/dropdowns', { field_name: fieldName, value: newVal.trim() });
-      onChange(newVal.trim());
-      toast.success(`"${newVal.trim()}" added!`);
+      await api.post('/dropdowns', { field_name: fieldName, value: trimmed });
+      onChange(trimmed);
+      // Immediately push new option into parent state — no reload needed
+      if (onOptionAdded) onOptionAdded(fieldName, trimmed);
+      toast.success(`"${trimmed}" added!`);
       setNewVal(''); setAdding(false);
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to add.');
@@ -100,6 +103,16 @@ export default function BillForm({ user }) {
   const [fetching, setFetching] = useState(isEdit);
   const [options,  setOptions]  = useState({ ...DEFAULTS });
   const [filePreview, setFilePreview] = useState(null);
+
+  // Immediately add new option to local state — no page reload needed
+  const handleOptionAdded = (fieldName, newValue) => {
+    setOptions(prev => ({
+      ...prev,
+      [fieldName]: prev[fieldName].includes(newValue)
+        ? prev[fieldName]
+        : [...prev[fieldName], newValue],
+    }));
+  };
 
   // Load custom dropdown options
   useEffect(() => {
@@ -257,16 +270,20 @@ export default function BillForm({ user }) {
 
             {/* Smart dropdowns */}
             {/* <SmartSelect label="Build By" fieldName="purpose_site"
-              value={form.purpose_site} onChange={v => set('purpose_site', v)} options={options.purpose_site} /> */}
+              value={form.purpose_site} onChange={v => set('purpose_site', v)} options={options.purpose_site}
+              onOptionAdded={handleOptionAdded} /> */}
 
             <SmartSelect label="Category" fieldName="category"
-              value={form.category} onChange={v => set('category', v)} options={options.category} />
+              value={form.category} onChange={v => set('category', v)} options={options.category}
+              onOptionAdded={handleOptionAdded} />
 
             <SmartSelect label="Sub-category" fieldName="sub_category"
-              value={form.sub_category} onChange={v => set('sub_category', v)} options={options.sub_category} />
+              value={form.sub_category} onChange={v => set('sub_category', v)} options={options.sub_category}
+              onOptionAdded={handleOptionAdded} />
 
                  <SmartSelect label="Build By" fieldName="purpose_site"
-              value={form.purpose_site} onChange={v => set('purpose_site', v)} options={options.purpose_site} />
+              value={form.purpose_site} onChange={v => set('purpose_site', v)} options={options.purpose_site}
+              onOptionAdded={handleOptionAdded} />
 
             {/* Vendor — free text */}
             <div className="field">
@@ -276,10 +293,12 @@ export default function BillForm({ user }) {
             </div>
 
             <SmartSelect label="Paid By" fieldName="paid_by"
-              value={form.paid_by} onChange={v => set('paid_by', v)} options={options.paid_by} />
+              value={form.paid_by} onChange={v => set('paid_by', v)} options={options.paid_by}
+              onOptionAdded={handleOptionAdded} />
 
             <SmartSelect label="Payment Mode" fieldName="payment_mode"
-              value={form.payment_mode} onChange={v => set('payment_mode', v)} options={options.payment_mode} />
+              value={form.payment_mode} onChange={v => set('payment_mode', v)} options={options.payment_mode}
+              onOptionAdded={handleOptionAdded} />
 
             {/* Amount */}
             <div className="field amount-field">
@@ -305,7 +324,8 @@ export default function BillForm({ user }) {
             </div>
 
             <SmartSelect label="Approved By" fieldName="approved_by"
-              value={form.approved_by} onChange={v => set('approved_by', v)} options={options.approved_by} />
+              value={form.approved_by} onChange={v => set('approved_by', v)} options={options.approved_by}
+              onOptionAdded={handleOptionAdded} />
 
             {/* Notes */}
             <div className="field full">
