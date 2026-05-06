@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+// Uses production backend when deployed, localhost when running locally
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
+
 const api = axios.create({
-  baseURL: (process.env.REACT_APP_API_URL || 'http://localhost:5002/api').trim(),
+  baseURL: BASE_URL.trim(),
   headers: { 'Content-Type': 'application/json' },
 });
 
