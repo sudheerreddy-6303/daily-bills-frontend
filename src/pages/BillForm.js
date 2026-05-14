@@ -4,12 +4,29 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 
 // ── Default dropdown options (merged with DB custom options) ──────
+// ── Category → Sub-category mapping ─────────────────────────────
+const SUB_CATEGORY_MAP = {
+  'Plywood':        ['16mm Plywood','9mm Plywood','12mm Plywood','18mm Plywood','19mm Plywood 8/4','19mm Plywood 7/4','16mm HDHMR','18mm HDHMR','12mm HDHMR','9mm HDHMR'],
+  'Laminates':      ['0.8mm Laminate Linear','1mm Colour Laminates','1.25mm Acrylic Sheets'],
+  'Transport':      ['Material','Man Power'],
+  'Salary':         [],
+  'IT Bills':       ['Internet Bills','Computers','Printers'],
+  'Petty Cash':     [],
+  'Current Bills':  ['Medhal','Suchitra','Nanakram Guda','Kompally'],
+  'Rent':           ['Medhal','Suchitra','Nanakram Guda','Kompally'],
+  'Stationary':     ['Pens','Books','Batteries'],
+  'Food':           [],
+  'Maintanance':    ['Medhal','Suchitra','Nanakram Guda','Kompally'],
+};
+
+const CATEGORIES = ['Plywood','Laminates','Transport','Salary','IT Bills','Petty Cash','Current Bills','Rent','Stationary','Food','Maintanance'];
+
 const DEFAULTS = {
-  category:     ['Laminates','Hardware','Salary','Transport','Labour','Raw Material','Admin','EMI','Other'],
-  sub_category: ['Raw Material','Labour','Fixed Cost','Admin','Other'],
+  category:     CATEGORIES,
+  sub_category: [],   // dynamically filtered by selected category
   purpose_site: ['Experience Center 1','EC2','Mod Factory','Office','Site A','Site B'],
   paid_by:      ['Ramya','Teja','Sundar','Bank'],
-  approved_by:  ['Ramya','Sundar','Seshagiri Raju'],
+  approved_by:  ['Shanti','Sundar','Seshagiri Raju'],
   payment_mode: ['Cash','UPI','Bank Transfer','Cheque','Other'],
   gst_tax:      ['Yes','No','18%','5%'],
 };
@@ -130,14 +147,29 @@ export default function BillForm({ user }) {
   const [options,     setOptions]     = useState({ ...DEFAULTS });
   const [filePreview, setFilePreview] = useState(null);
 
-  // Add new option directly to local state without page reload
+  // Add new option and refresh local state
   const handleOptionAdded = (fieldName, newValue) => {
-    setOptions(prev => ({
-      ...prev,
-      [fieldName]: prev[fieldName].includes(newValue)
-        ? prev[fieldName]
-        : [...prev[fieldName], newValue],
-    }));
+    setOptions(prev => {
+      const updated = { ...prev };
+      if (fieldName === 'sub_category') {
+        // Add to custom sub-cats list and it'll show via getSubOptions()
+        updated._customSubCats = [...(prev._customSubCats || []), { cat: form.category, val: newValue }];
+      } else {
+        updated[fieldName] = prev[fieldName]?.includes(newValue)
+          ? prev[fieldName]
+          : [...(prev[fieldName] || []), newValue];
+      }
+      return updated;
+    });
+  };
+
+  // Get sub-category options for the currently selected category
+  const getSubOptions = () => {
+    const base = SUB_CATEGORY_MAP[form.category] || [];
+    const custom = (options._customSubCats || [])
+      .filter(c => typeof c === 'string' ? true : c.cat === form.category)
+      .map(c => typeof c === 'string' ? c : c.val);
+    return [...new Set([...base, ...custom])];
   };
 
   // Load custom dropdown options from DB and merge with defaults
@@ -147,14 +179,20 @@ export default function BillForm({ user }) {
         const custom = r.data.data || {};
         setOptions(prev => {
           const merged = { ...prev };
-          Object.keys(DEFAULTS).forEach(k => {
-            const combined = [...DEFAULTS[k], ...(custom[k] || [])];
+          // category: always use ONLY the fixed CATEGORIES list — never merge old DB values
+          merged.category = CATEGORIES;
+          // sub_category: handled dynamically via SUB_CATEGORY_MAP + user additions
+          // Other dropdowns: merge defaults with any user-added custom values
+          ['purpose_site','paid_by','payment_mode','approved_by','gst_tax'].forEach(k => {
+            const combined = [...(DEFAULTS[k] || []), ...(custom[k] || [])];
             merged[k] = [...new Set(combined)];
           });
+          // Store user-added sub_categories keyed by category
+          merged._customSubCats = custom.sub_category || [];
           return merged;
         });
       })
-      .catch(() => {}); // silently fail — defaults still work
+      .catch(() => {});
   }, []);
 
   // Load bill data when editing
@@ -345,15 +383,19 @@ export default function BillForm({ user }) {
             {/* Category */}
             <SmartSelect
               label="Category" fieldName="category"
-              value={form.category} onChange={v => set('category', v)}
+              value={form.category}
+              onChange={v => { set('category', v); set('sub_category', ''); }}
               options={options.category} onOptionAdded={handleOptionAdded}
             />
 
-            {/* Sub-category */}
+            {/* Sub-category — filtered by selected category */}
             <SmartSelect
               label="Sub-category" fieldName="sub_category"
               value={form.sub_category} onChange={v => set('sub_category', v)}
-              options={options.sub_category} onOptionAdded={handleOptionAdded}
+              options={getSubOptions()}
+              onOptionAdded={handleOptionAdded}
+              placeholder={form.category ? `— Select ${form.category} sub-type —` : '— Select Category first —'}
+              disabled={!form.category}
             />
 
             {/* Build By / Site */}
