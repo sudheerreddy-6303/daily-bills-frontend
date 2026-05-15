@@ -9,23 +9,24 @@ const SUB_CATEGORY_MAP = {
   'Plywood':        ['16mm Plywood','9mm Plywood','12mm Plywood','18mm Plywood','19mm Plywood 8/4','19mm Plywood 7/4','16mm HDHMR','18mm HDHMR','12mm HDHMR','9mm HDHMR'],
   'Laminates':      ['0.8mm Laminate Linear','1mm Colour Laminates','1.25mm Acrylic Sheets'],
   'Transport':      ['Material','Man Power'],
-  'Salary':         [],
+  'Hardware':       ['Tandam','Screws','Pull Out','Pantry Unit','Hinges','Handles','Wicker Basket','Knob','T-Patti','Bit','G- Sction Profile','Drawer Chanels','Other Hardware'],
+  'Salary':         ['Sandeep','Ranjeet','Ankit','MK','Priyanaka','Chandu','Soni','Ramya','Raviteja','Sakshi','Sudheer','Nagamani'],
   'IT Bills':       ['Internet Bills','Computers','Printers'],
   'Petty Cash':     [],
   'Current Bills':  ['Medhal','Suchitra','Nanakram Guda','Kompally'],
   'Rent':           ['Medhal','Suchitra','Nanakram Guda','Kompally'],
-  'Stationary':     ['Pens','Books','Batteries'],
-  'Food':           [],
+  'Stationary':     ['Pens','Books','Batteries','Other Stationary'],
+  'Food':           ['food for labour','food for office','food for meeting'],
   'Maintanance':    ['Medhal','Suchitra','Nanakram Guda','Kompally'],
 };
 
-const CATEGORIES = ['Plywood','Laminates','Transport','Salary','IT Bills','Petty Cash','Current Bills','Rent','Stationary','Food','Maintanance'];
+const CATEGORIES = ['Plywood','Laminates','Hardware','False celing','Painting','Electrical','Civil','Transport','Salary','IT Bills','Petty Cash','Current Bills','Rent','Stationary','Food','Maintanance'];
 
 const DEFAULTS = {
   category:     CATEGORIES,
   sub_category: [],   // dynamically filtered by selected category
   purpose_site: ['Experience Center 1','EC2','Mod Factory','Office','Site A','Site B'],
-  paid_by:      ['Ramya','Teja','Sundar','Bank'],
+  paid_by:      ['Ramya','Teja','Sundar','Seshagiri Raju','Shanti'],
   approved_by:  ['Shanti','Sundar','Seshagiri Raju'],
   payment_mode: ['Cash','UPI','Bank Transfer','Cheque','Other'],
   gst_tax:      ['Yes','No','18%','5%'],
@@ -50,7 +51,7 @@ const toBase64 = (file) => new Promise((res, rej) => {
 });
 
 // ── SmartSelect — dropdown with inline "+ Add New" ────────────────
-function SmartSelect({ label, fieldName, value, onChange, options, required, placeholder, onOptionAdded }) {
+function SmartSelect({ label, fieldName, value, onChange, options, required, placeholder, onOptionAdded, parentCategory }) {
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState('');
   const [saving, setSaving] = useState(false);
@@ -61,9 +62,13 @@ function SmartSelect({ label, fieldName, value, onChange, options, required, pla
     setSaving(true);
     try {
       // POST /api/dropdowns  { field_name, value }
-      await api.post('/dropdowns', { field_name: fieldName, value: trimmed });
+      // For sub_category, store as "CATEGORY::value" to filter by parent later
+      const saveValue = (fieldName === 'sub_category' && parentCategory)
+        ? parentCategory + '::' + trimmed
+        : trimmed;
+      await api.post('/dropdowns', { field_name: fieldName, value: saveValue });
       onChange(trimmed);
-      if (onOptionAdded) onOptionAdded(fieldName, trimmed);
+      if (onOptionAdded) onOptionAdded(fieldName, trimmed, parentCategory);
       toast.success(`"${trimmed}" added!`);
       setNewVal(''); setAdding(false);
     } catch (err) {
@@ -148,12 +153,13 @@ export default function BillForm({ user }) {
   const [filePreview, setFilePreview] = useState(null);
 
   // Add new option and refresh local state
-  const handleOptionAdded = (fieldName, newValue) => {
+  const handleOptionAdded = (fieldName, newValue, parentCat) => {
     setOptions(prev => {
       const updated = { ...prev };
       if (fieldName === 'sub_category') {
-        // Add to custom sub-cats list and it'll show via getSubOptions()
-        updated._customSubCats = [...(prev._customSubCats || []), { cat: form.category, val: newValue }];
+        // Store with parent category so getSubOptions can filter correctly
+        const cat = parentCat || form.category;
+        updated._customSubCats = [...(prev._customSubCats || []), { cat, val: newValue }];
       } else {
         updated[fieldName] = prev[fieldName]?.includes(newValue)
           ? prev[fieldName]
@@ -163,12 +169,21 @@ export default function BillForm({ user }) {
     });
   };
 
-  // Get sub-category options for the currently selected category
+  // Get sub-category options for the currently selected category ONLY
   const getSubOptions = () => {
+    if (!form.category) return [];
     const base = SUB_CATEGORY_MAP[form.category] || [];
+    const prefix = form.category + '::';
     const custom = (options._customSubCats || [])
-      .filter(c => typeof c === 'string' ? true : c.cat === form.category)
-      .map(c => typeof c === 'string' ? c : c.val);
+      .filter(c => {
+        if (typeof c === 'object') return c.cat === form.category; // {cat, val} from session
+        if (typeof c === 'string') return c.startsWith(prefix);    // "CAT::val" from DB
+        return false;
+      })
+      .map(c => {
+        if (typeof c === 'object') return c.val;
+        return c.replace(prefix, ''); // strip "CAT::" prefix
+      });
     return [...new Set([...base, ...custom])];
   };
 
@@ -187,8 +202,11 @@ export default function BillForm({ user }) {
             const combined = [...(DEFAULTS[k] || []), ...(custom[k] || [])];
             merged[k] = [...new Set(combined)];
           });
-          // Store user-added sub_categories keyed by category
-          merged._customSubCats = custom.sub_category || [];
+          // Store user-added sub_categories — keep as raw strings (prefixed "CAT::val")
+          // getSubOptions() will filter by the prefix for the active category
+          merged._customSubCats = (custom.sub_category || []).filter(v =>
+            typeof v === 'string' && v.includes('::')
+          );
           return merged;
         });
       })
@@ -394,7 +412,8 @@ export default function BillForm({ user }) {
               value={form.sub_category} onChange={v => set('sub_category', v)}
               options={getSubOptions()}
               onOptionAdded={handleOptionAdded}
-              placeholder={form.category ? `— Select ${form.category} sub-type —` : '— Select Category first —'}
+              parentCategory={form.category}
+              placeholder={form.category ? `— Select ${form.category} type —` : '— Select a Category first —'}
               disabled={!form.category}
             />
 
